@@ -1,33 +1,15 @@
-subtitle_translator
-===================
+#### hey
+i found two other projects that to the same thing but they needed the google cloud API which 
+i can't afford 😢 so i made this which uses the free api from the same server that translate.google.com uses
 
-Translate a subtitle file from original language to desired  language. This gives you a machine translated subtitle.
+___
 
-![Subtitle Demo Gif](img/tty.gif)
+*translate a .srt file using the free google translate api you can change the target and source languages from the .py file
 
-Make sure you have Python 2.7 or above installed
-Check Python:
-```shell
-python --version
-```
+options:
 
-Clone the project:
-```shell
-git clone https://github.com/gunesmes/subtitle_translator.git
-```
-
-# To run the translater
-* you must have a valid subtitle in .srt format
-* You can use Google translator or yandex
-* For yandex you must have Yandex Translater API key. You can get it from here: http://api.yandex.com/key/keyslist.xml
-
-* Go to project folder and run python file
-```shell
-cd /path/to/project
-python run.py <path/to/files> <max-length-of-lines> <translator:google or yandex> <source language> <target language>
-python run.py "/Users/mesutgunes/Projects/subtitle_translator" 40 yandex pl tr
-````
-
-- Don't wory about source language, translater can understand it.
-- Check language abbreviation: https://developers.google.com/translate/v2/using_rest#language-params
-- The .srt files in the given directory are to be translated to target language 
+options:
+  -h, --help      show this help message and exit
+  -i , --input    the source file PATH
+  -o , --output   the translated file PATH
+  
