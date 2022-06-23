@@ -1,244 +1,82 @@
-# -*- coding: utf-8 -*-
-# Author Name: Mesut Güneş
-# Author Email: gunesmes@gmail.com
-# Author Github username: gunesmes
-
-import goslate
-import time, requests, codecs, sys, urllib, random
-
-# get yandex translate key from: https://tech.yandex.com/keys/?service=trnsl
-YANDEX_API_KEY = "trnsl.1.1.20160603T091015Z.87ae2d901d0e30b5.c07fcad534693b23c6b5151e4284d79702efd762"
+from fnmatch import translate
+from hashlib import new
+import srt 
+from googletrans import Translator
+import numpy as np
+import argparse
 
 
-class SubsTranslater:
-    @staticmethod
-    def read_file(file_name):
-        fr = codecs.open(file_name, "r", encoding='utf-8-sig')
-        lines = fr.readlines()
-        fr.close()
+TARGET_LANGUAGE = "ta"
+SOURCE_LANGUAGE = "en"
 
-        return lines
-
-    def write_file(self, file_name, target_language, source_language):
-        fn = self.format_file_name(file_name, target_language, source_language)
-        fw = open(fn, 'w')
-
-        return fw
-
-    @staticmethod
-    def format_file_name(file_name, target_language, source_language):
-        name_sep = "_" + source_language + "_to_" + target_language
-
-        # index number of last dot
-        last_dot = file_name.rfind('.')
-
-        # means that there is no dot in the file name, 
-        # and file name has no file type extension 
-        if last_dot == -1:
-            new_file_name = file_name + str(name_sep) + '.srt'
-
-        else:
-            baseName = file_name[0: last_dot]
-            ext = file_name[last_dot: len(file_name)]
-            new_file_name = baseName + str(name_sep) + ext
-
-        return new_file_name
-
-    @staticmethod
-    def prepare_line(line):
-        # preparing line before sending to google translate
-        # unexpected characters will be removed
-        # uncompleted sentences will be unified
-
-        line = line[1:]  # remove added space
-        line_ = ""
-        prefix = ""
-        suffix = ""
-
-        # check if the line has any characters like these "<i>", "<b>", "<u>", "</i>, "</b>
-        # check if it is like "<i> ... </i>"
-        try:
-            if line[0] == "<" and line[2] == ">" and line[-1] == ">" and line[-4] == "<":
-                line_ = line[3:-4]
-                prefix = line[0:3]
-                suffix = line[-4:]
-
-            # check if it is like "<i> ... "
-            elif line[0] == "<" and line[2] == ">" and line[-1] != ">" and line[-4] != "<":
-                line_ = line[3:]
-                prefix = line[0:3]
-
-            # check if it is like " ... </i>"
-            elif line[0] != "<" and line[2] != ">" and line[-1] == ">" and line[-4] == "<":
-                line_ = line[0:-4]
-                suffix = line[-4:]
-
-            else:
-                line_ = line
-        except:
-            line_ = line
-
-        return line_, prefix, suffix
-
-    @staticmethod
-    def send_google_translator(prepared_sub, source_language, target_language):
-        # Using Google API is not free so we can send sentences via browser for this Goslate module 
-        # is written by ZHUO Qiang. For more information http://pythonhosted.org/goslate/#module-goslate
-        # More info about language abbreviation
-        # https://developers.google.com/translate/v2/using_rest#language-params
-        try:
-            gs = goslate.Goslate()
-        except:
-            print("Wait and send again")
-            time.sleep(5)
-            gs = goslate.Goslate()
-
-        return gs.translate(prepared_sub, target_language, source_language)
-
-    @staticmethod
-    def send_yandex_translator(prepared_sub, source_language, target_language):
-        # Using Yandex translator api is free!
-        url = "https://translate.yandex.net/api/v1.5/tr.json/translate"
-
-        # Get Yandex API key from http://api.yandex.com/key/form.xml?service=trnsl
-        yandex_api_key = YANDEX_API_KEY
-
-        data = {
-            'text': prepared_sub,
-            'format': "plain",
-            'lang': source_language + "-" + target_language,
-            'key': yandex_api_key
-        }
-
-        response = requests.post(url, data)
-        response = response.json()
-
-        if response["code"] > 400:
-            print(
-                "\n   Get Yandex API key from 'http://api.yandex.com/key/form.xml?service=trnsl' \n   then set the 'yandex_api_key' at line 100 in 'src/subtitle_translater.py'\n")
-            sys.exit()
-
-        return response['text'][0]
-
-    @staticmethod
-    def prepare_translated_sub(translated_sub, prefix, suffix, _max_length):
-        translated_split_lines = {}
-        lines = ""
-        translated_lines = {}
-        temp_lines = {}
-        i = 0
-        total_len = 0
-        max_length = _max_length
-
-        # if the subtitle has dialogs
-        if ". -" in translated_sub:
-            translated_sub_tmp = translated_sub.split(". -")
-
-            # separate dialogs
-            translated_sub_dia = {0: translated_sub_tmp[0] + "."}
-            for i in range(1, len(translated_sub_tmp)):
-                translated_sub_dia[i] = "-" + translated_sub_tmp[i]
-
-            translated_split_lines = translated_sub_dia
-
-        else:
-            translated_split_lines[0] = translated_sub
-
-        for i in range(len(translated_split_lines)):
-            if len(translated_split_lines[i]) > max_length:
-                words = translated_split_lines[i].split(" ")
-
-                for word in words:
-                    if len(lines + word) <= max_length:
-                        if word == words[-1]:
-                            # if remaining part is shorter than max_length
-                            translated_lines[i] = lines + word + suffix
-                        else:
-                            lines += word + " "
-                            total_len += len(word) + 1
-
-                    else:
-                        # set number of characters shown in screen by max_length
-                        # if first line should have prefix, and last line should have suffix
-                        # if last word left alone, it's added to the previous line
-                        temp_lines[i] = [lines, (prefix + lines)][i == 0]
-                        translated_lines[i] = [temp_lines[i], (lines + word + suffix)][word == words[-1]]
-                        i += 1
-                        lines = ""
-                        lines += word + " "
+TARGET_LANGUAGE = "ta"
+SOURCE_LANGUAGE = "en"
 
 
-            else:
-                translated_lines[i] = prefix + translated_split_lines[i] + suffix
 
-        return translated_lines
+parser = argparse.ArgumentParser(description="""translate a .srt file using the free google translate api
+you can change the target and source languages from the .py file """)
+parser.add_argument("-i","--input", type=str, metavar="", required=True, help='the source file PATH')
+parser.add_argument("-o","--output", type=str, metavar="", required=True, help='the translated file PATH')
+args = parser.parse_args()
 
-    def translate_subtitle(self, file_name, source_language, target_language, translator, _max_length):
-        """
-        this function translate a subtitle file from original language to desired  language
-        
-        line may be the order number of the subtitle or just for real line 
-        such as answer to age given "33" or there is no order number but "-->"   
-        must be present to in the middle of the start and end time of subtitle
-        to be shown. There must a empty line between two ordered subtitle.
-        Expected / standart subtitle should be like this:    
-            1
-            00:00:27,987 --> 00:00:29,374
-            - Babe.
-            - Mmm.
-            
-            2
-            00:00:30,210 --> 00:00:31,634
-            - Lizzie.
-            - Mmm.
-            
-            3
-        """
-        fw = self.write_file(file_name, target_language, source_language)
-        lines = self.read_file(file_name)
-        line = str()
 
-        i = 0
-        for i in range(len(lines)):
-            # print non-translatable lines 
-            if lines[i].rstrip().isdigit() and "-->" in lines[i + 1] or "-->" in lines[i]:
-                fw.write(lines[i])
-                print(lines[i].strip())
-                continue
 
-            # concatenate lines until empty line:
-            while not lines[i].rstrip() == "":
-                line += " " + lines[i].rstrip()
-                break
+sub = open(args.input, "r")
 
-            if lines[i].rstrip() == "":
-                # prepare line before sending translator
-                serialized_sub = self.prepare_line(line)
-                prepared_sub = serialized_sub[0]
-                prefix = serialized_sub[1]
-                suffix = serialized_sub[2]
+org_sub_list = list(srt.parse(sub, "ignore_errors"))
 
-                time.sleep(random.random())  # sleep some random 0 to 1 second
-                if translator.lower() == "google":
-                    # send prepared subtitle to Google translator
-                    translated_sub = self.send_google_translator(prepared_sub, source_language, target_language)
 
-                elif translator.lower() == "yandex":
-                    # send prepared subtitle to Yandex translator
-                    translated_sub = self.send_yandex_translator(prepared_sub, source_language, target_language)
 
-                # prepare sub before writing new subtitle file
-                prepared_lines = self.prepare_translated_sub(translated_sub, prefix, suffix, _max_length)
-                for i in range(len(prepared_lines)):
-                    print(prepared_lines[i])
-                    fw.write(str("%s\n" % prepared_lines[i].encode("utf8")))
+translator = Translator()
 
-                fw.write("\n")
-                print("")
-                line = ""
+src_text_list = []
+dest_text_list = []
+i = 0
+for subtitle  in org_sub_list:
+    i += 1
+    text_to_translate = subtitle.content.replace("\n", " ")
+    
+    src_text_list.append(text_to_translate)
 
-        # Print information about the subtitle
-        info = "Translated by subtitle_translator via %s translator \nwritten by Mesut Gunes: https://github.com/gunesmes/subtitle_translator\n" % translator.upper()
-        fw.write(info)
-        print(info)
-        print("New file name: ", self.format_file_name(file_name, target_language, source_language))
+### trying to make translation faster and trick google api
+pieces = 23
+new_arrays = np.array_split(src_text_list, pieces)
+
+
+
+
+
+joint_text_list = []
+for item in new_arrays:
+    joint_text_list.append("\n".join(item.tolist()))
+
+
+
+joint_translated_list = translator.translate(joint_text_list, src=SOURCE_LANGUAGE,dest=TARGET_LANGUAGE)
+
+translated_sub_list_list = []
+for item in joint_translated_list:
+    text_of_item = item.text
+    translated_sub_list_list.append(text_of_item.split("\n"))
+
+translated_sub_list = []
+for i in translated_sub_list_list:
+    for j in i:
+        translated_sub_list.append(j)
+
+print(str(len(translated_sub_list)) + "==" + str(len(org_sub_list)) + "  <-- these two numbers need to be the same.")
+
+
+
+
+for translation,srt_object in zip(translated_sub_list ,org_sub_list):
+
+    srt_object.content = translation
+
+
+
+new_sub = open(args.output,"w", encoding="utf-8")
+
+new_sub.write(srt.compose(org_sub_list))
+
